@@ -127,26 +127,13 @@ html[data-theme="light"] .blob { opacity: .26; }
 html[data-theme="light"] .ic-sun { display: none; }
 html[data-theme="light"] .ic-moon { display: block; }
 
-/* ── notice ─────────────────────────────────────────────── */
-.notice {
-  position: relative; z-index: 2; margin: 12px clamp(14px, 3vw, 30px) 0;
-  padding: 11px 40px 11px 14px; border-radius: 12px; font-size: 12.5px; line-height: 1.5;
-  color: var(--muted); background: rgba(255, 180, 84, .08);
-  border: 1px solid rgba(255, 180, 84, .25);
-}
-.notice strong { color: var(--warn); }
-.notice em { color: var(--text); font-style: normal; }
-.notice-x { position: absolute; right: 8px; top: 6px; background: none; border: 0; color: var(--muted); font-size: 20px; cursor: pointer; line-height: 1; }
-.notice[hidden] { display: none; }
-
 /* ── layout ─────────────────────────────────────────────── */
 .layout {
   position: relative; z-index: 2;
   display: grid; grid-template-columns: 300px minmax(0, 1fr) 300px;
   gap: 16px; padding: 16px clamp(14px, 3vw, 30px) 18px;
-  height: calc(100vh - 146px);
+  height: calc(100vh - 74px);   /* viewport minus the top bar */
 }
-body.no-notice .layout { height: calc(100vh - 74px); }
 
 .panel {
   background: var(--panel); border: 1px solid var(--stroke); border-radius: var(--radius);

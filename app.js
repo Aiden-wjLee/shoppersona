@@ -1000,7 +1000,6 @@ async function explain() {
 $("#composer").addEventListener("submit", (e) => { e.preventDefault(); handleText($("#input").value); });
 $("#budgetRange").addEventListener("input", (e) => { setBudget(Number(e.target.value)); renderRecs(); });
 $("#resetBtn").addEventListener("click", boot);
-$("#noticeClose").addEventListener("click", () => { $("#notice").hidden = true; document.body.classList.add("no-notice"); });
 $("#trailBtn").addEventListener("click", trailModal);
 $("#overrideBtn").addEventListener("click", typesModal);
 $("#modalClose").addEventListener("click", closeModal);
