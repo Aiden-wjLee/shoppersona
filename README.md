@@ -66,6 +66,42 @@ parse is kept visibly *beside* the profile rather than silently folded into it.
 Ranking is `0.56 × axis fit + 0.26 × needs match + 0.18 × budget headroom`, then scaled by
 confidence — an uncertain profile is not allowed to claim a precise match percentage.
 
+## The couple case — two people, one budget
+
+One extra case, reachable from **“We're deciding together →”** in the right column (or `?auto=couple`).
+The argument it exists to make: *a model that holds more context than either person in the room can
+arbitrate better than the two of them negotiating from memory.* Neither half of a couple can recall
+the other's twelve months of receipts mid-argument about a sofa. The model can, and it can score both
+sides against one cap without wanting anything itself.
+
+`PARTNER` is a second four-purchase history, read the same way yours is. It comes out **SPEL — The
+Statement Buyer** against your **DVFL — The Quartermaster**: three letters apart, agreeing only on
+attachment. Merged, the household reads **DPEL — The Connoisseur**.
+
+What is computed, not scripted:
+
+- **The merge** — a confidence-weighted midpoint (`jointAxes()`), not a polite average. The split is
+  printed rather than buried: on the default path it is 57/43 toward you, *because the model has read
+  eight of your purchases and four of theirs*, which is a bias worth showing.
+- **Joint confidence** — the mean of the two, minus a penalty for how far apart they sit. Two people
+  are less certain than one, because the disagreement is real rather than noise.
+- **The joint cap** — `state.budget + PARTNER.budget`, still a hard filter in code. On the defaults
+  that is S$970, and the S$1,180 sideboard never reaches the ranking at all.
+- **The ruling** — `SHARED` holds the three items the couple has been arguing about. Two have a
+  `champion`; the third is nobody's.
+
+The point of the case is the last line of the ruling, and it is arithmetic rather than rhetoric:
+scored against **your context alone** the Torvald sofa wins (78% vs 66%); scored against **both**
+the Marran table wins (79% vs 69%). Same catalogue, same cap, same scorer — `score(p, a, ctx)` takes
+an optional context and is the only function that changed. Only whose context was in the room differs.
+If the flip doesn't happen on some other path, the ruling says so instead of claiming it.
+
+And the closing callout states what the merge cannot do: it does not know which of the two cares more,
+and no receipt will say. It only sizes the widest gap and names the axis to argue out loud.
+
+Everything in this case is additive and read-only — the four rounds never look at `PARTNER`, and
+running it mutates no state.
+
 ## What is here
 
 | Piece | Where |
@@ -77,6 +113,7 @@ confidence — an uncertain profile is not allowed to claim a precise match perc
 | Recommendations with per-item reasoning | `rank()`, `score()`, `why()` |
 | The 16-type picker / user override | `typesModal()`, `lockType()` |
 | Evidence trail | `trailModal()` |
+| The couple case | `PARTNER`, `SHARED`, `jointAxes()`, `rankShared()`, `runCouple()` |
 | Dark / light theme, ambient background | `styles.css` |
 
 ## Where the real logic goes
@@ -90,6 +127,10 @@ confidence — an uncertain profile is not allowed to claim a precise match perc
 - `CATALOGUE` — swap for the real catalogue. `fit` is the only new field a record needs.
 - `QUESTIONS` — currently one fixed question per axis. The real version should generate a question
   aimed at whichever axis is closest to zero, which is already what `sortedAxes()` picks out.
+
+- `PARTNER.purchases[].t` — same as above, one rung out: in the real version the second person's
+  readings are proposed by the model from *their* history, and each of them should be correctable by
+  the person they describe, not by their partner.
 
 The exclusion path (*"it was a gift — don't read me into it"*) is deliberate. A system that infers
 personality from purchases has to let the person say a purchase wasn't about them.

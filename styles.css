@@ -416,6 +416,41 @@ td.k { color: var(--muted); width: 30%; }
 tr:last-child td { border-bottom: 0; }
 td em { font-style: normal; color: var(--you); }
 
+/* ── the couple case: two profiles on one track ─────────── */
+.mini-btn.alt { color: var(--accent-2); border-color: color-mix(in srgb, var(--accent-2) 40%, transparent); }
+.mini-btn.alt:hover { color: var(--accent-2); border-color: var(--accent-2); background: color-mix(in srgb, var(--accent-2) 10%, transparent); }
+
+.signal.theirs { border-color: color-mix(in srgb, var(--accent-2) 40%, transparent); }
+.signal.theirs .sig-reason { border-left-color: var(--accent-2); background: color-mix(in srgb, var(--accent-2) 9%, transparent); }
+
+.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.duo-card { padding: 12px; border-radius: 13px; border: 1px solid var(--stroke); background: color-mix(in srgb, var(--panel-solid) 55%, transparent); }
+.duo-card.u { border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.duo-card.t { border-color: color-mix(in srgb, var(--accent-2) 40%, transparent); }
+.duo-card .who { font-size: 9.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
+.duo-card .type-code { font-size: 26px; margin-top: 2px; }
+.duo-card.t .type-code { background: linear-gradient(135deg, var(--accent-2), var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.duo-card .type-name { font-size: 13px; }
+.duo-card .type-line { font-size: 11px; }
+.duo-conf { display: block; margin-top: 9px; font-size: 10px; color: var(--faint); font-variant-numeric: tabular-nums; }
+
+.pair-key { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 14px; font-size: 10px; color: var(--faint); }
+.pair-key span { display: inline-flex; align-items: center; gap: 5px; }
+.pair-key span::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--text); }
+.pair-key .k-t::before { background: var(--accent-2); }
+.pair-key .k-g::before { width: 16px; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--warn) 55%, transparent); }
+
+.pair-axes { margin-top: 10px; }
+.pair-axes .axis-track b.gap { background: color-mix(in srgb, var(--warn) 55%, transparent); }
+.pair-axes .axis-track b.agree { background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.pair-axes .axis-track i.them { background: var(--accent-2); }
+.pair-axes .axis-val b { font-weight: 650; }
+
+.rec-brand .tag { margin-left: 6px; vertical-align: 1px; }
+.rec-foot b, .rec-why b { color: var(--accent); }
+
+@media (max-width: 620px) { .duo { grid-template-columns: 1fr; } }
+
 /* ── responsive ─────────────────────────────────────────── */
 @media (max-width: 1280px) {
   .layout { grid-template-columns: 256px minmax(0, 1fr) 256px; gap: 12px; }

@@ -341,7 +341,13 @@ function rank() {
   };
 }
 
-function score(p, a) {
+/* ctx lets the same scorer run against a context that isn't the
+   single user — see the couple case below. Left out, it scores
+   exactly as it always did. */
+function score(p, a, ctx) {
+  const needs = ctx ? ctx.needs : state.needs;
+  const budget = ctx ? ctx.budget : state.budget;
+  const conf = ctx ? ctx.conf : confidence();
   let acc = 0, wsum = 0;
   for (const ax in p.fit) {
     const w = Math.abs(p.fit[ax]) / 100;
@@ -351,12 +357,12 @@ function score(p, a) {
   }
   const axisFit = wsum ? acc / wsum : 0.5;
   const needFit = p.needs.length
-    ? p.needs.filter((n) => state.needs.has(n)).length / p.needs.length
+    ? p.needs.filter((n) => needs.has(n)).length / p.needs.length
     : 0.45;
-  const headroom = 1 - Math.min(1, p.price / Math.max(state.budget, 1)) * 0.55;
+  const headroom = 1 - Math.min(1, p.price / Math.max(budget, 1)) * 0.55;
   const raw = 0.56 * axisFit + 0.26 * needFit + 0.18 * headroom;
   // an uncertain profile can't claim a precise match, so scores start hedged
-  return Math.round(100 * raw * (0.74 + 0.26 * confidence() / 100));
+  return Math.round(100 * raw * (0.74 + 0.26 * conf / 100));
 }
 
 /* The sentence under each recommendation: which axis carried it,
@@ -805,6 +811,7 @@ async function runFinal() {
     `<b>What I'd skip.</b> ${skip.name} at ${skip.score}% — ${skip.note.charAt(0).toLowerCase() + skip.note.slice(1)} That suits ${oppositeName(c)}, not you.`);
 
   renderQuickies(b, [
+    [`Now do it with ${PARTNER.name}`, () => runCouple()],
     ["Show the evidence trail", () => trailModal()],
     ["I still think the type is wrong", () => typesModal()],
     ["Start over", () => boot()]
@@ -816,6 +823,281 @@ const oppositeName = (c) => {
   const flip = c.split("").map((L, i) => (L === AXES[i].posL ? AXES[i].negL : AXES[i].posL)).join("");
   return TYPES[flip].name;
 };
+
+/* ============================================================
+   ONE CASE: TWO PEOPLE, ONE DECISION
+   ------------------------------------------------------------
+   The argument this case exists to make: a model that holds more
+   context than either person in the room can arbitrate better
+   than the two of them negotiating from memory. Neither half of
+   a couple can recall the other's twelve months of receipts
+   while arguing about a sofa on a Sunday. The model can, and it
+   can score both sets against one cap without wanting anything.
+
+   Everything here is additive and read-only. The four rounds
+   never look at it, no state is mutated, and the single-person
+   profile on the right is untouched by running it.
+   ============================================================ */
+
+const PARTNER = {
+  name: "Noor",
+  budget: 520,
+  needs: ["small", "cook", "gift"],
+  /* Their history, read exactly the way yours is: one claim per
+     purchase, one axis push. They volunteered these, so none of
+     them carry a correction weight. */
+  purchases: [
+    { name: "Anouk ribbed floor lamp, ochre", brand: "Anouk", kind: "lamp", price: 290, date: "21 Aug",
+      t: "Bought forty minutes after seeing it in a friend's flat, at full price. No list, no comparison, no wait.",
+      w: { plan: -3, price: 2, mode: 2 } },
+    { name: "Marran silk throw", brand: "Marran", kind: "jacket", price: 180, date: "2 Jul",
+      t: "Fourth piece from the same atelier this year. The palette is settled; only the object changes.",
+      w: { brand: -3, mode: 2 } },
+    { name: "Lacour dinner plates, set of 6", brand: "Lacour", kind: "pan", price: 240, date: "14 Sep",
+      t: "Took the hand-finished rim over the plain set at half the price — for plates that live in a cupboard.",
+      w: { mode: 3, price: 3 } },
+    { name: "Marran candle — 3rd reorder", brand: "Marran", kind: "carafe", price: 68, date: "28 Aug",
+      t: "Third reorder of a S$68 candle. Not thrift, but not novelty either: a habit held at a premium.",
+      w: { price: 2, brand: -2, plan: -1 } }
+  ]
+};
+
+/* The shortlist the two of you have actually been arguing about.
+   champion says who brought it to the table — the third one is
+   nobody's, which is the part worth watching. */
+const SHARED = [
+  { id: "s1", name: "Torvald Loom 2-seat, grey", brand: "Torvald", kind: "sofa", price: 940,
+    fit: { plan: 55, price: -30, mode: -55, brand: -60 }, needs: ["small"], champion: "you",
+    forYou: "Same maker as your sofa and your shelf, a published ten-year frame warranty, and the grey costs nothing extra.",
+    forThem: "The fourth grey object in a room they have spent a year trying to give a colour to." },
+  { id: "s2", name: "Anouk Verre sideboard, ochre", brand: "Anouk", kind: "shelf", price: 1180,
+    fit: { mode: 70, price: 55, plan: -35, brand: 25 }, needs: ["small", "gift"], champion: "them",
+    forYou: "S$1,180 of storage you already have, from a maker neither of you has tested once.",
+    forThem: "The only thing on this list anyone would look at on purpose." },
+  { id: "s3", name: "Marran oiled-ash low table", brand: "Marran", kind: "desk", price: 720,
+    fit: { plan: 35, price: 15, mode: 35, brand: -50 }, needs: ["small", "cook"], champion: null,
+    forYou: "A published repair policy, replaceable legs, and the cheapest of the three by S$220.",
+    forThem: "Marran again — the fifth piece, in the palette they already chose." }
+];
+
+const sumAxes = (list) => {
+  const a = { plan: 0, price: 0, mode: 0, brand: 0 };
+  list.forEach((p) => { for (const ax in p.w) a[ax] += p.w[ax]; });
+  for (const ax in a) a[ax] = clamp(Math.round(a[ax] * 9), -100, 100);
+  return a;
+};
+
+const partnerAxes = () => sumAxes(PARTNER.purchases);
+/* Same shape as confidence(): a base, plus each purchase read, plus
+   the correction weight — theirs are self-reported, so they all count
+   as corrected. Four purchases is thin, and the figure says so. */
+const partnerConf = () => clamp(8 + PARTNER.purchases.length * 7 + PARTNER.purchases.length * 3, 0, 95);
+
+/* The merge is a confidence-weighted midpoint, not a polite average:
+   whoever the model has read more of pulls harder. That's a bias, so
+   the ruling prints the split instead of burying it. */
+function jointAxes() {
+  const you = axes(), them = partnerAxes();
+  const wy = confidence(), wt = partnerConf(), tot = wy + wt || 1;
+  const a = {};
+  AXES.forEach((A) => { a[A.k] = clamp(Math.round((you[A.k] * wy + them[A.k] * wt) / tot), -100, 100); });
+  return a;
+}
+
+const jointShare = () => Math.round(100 * confidence() / (confidence() + partnerConf() || 1));
+const jointBudget = () => state.budget + PARTNER.budget;
+const jointNeeds = () => new Set([...state.needs, ...PARTNER.needs]);
+
+/* Two people are less certain than one, because the disagreement is
+   real rather than noise. The average confidence takes a penalty for
+   how far apart the two profiles sit. */
+function jointConf() {
+  const you = axes(), them = partnerAxes();
+  const gap = AXES.reduce((n, A) => n + Math.abs(you[A.k] - them[A.k]), 0) / 4;
+  return clamp(Math.round((confidence() + partnerConf()) / 2 - gap / 8), 0, 95);
+}
+
+const jointCtx = () => ({ needs: jointNeeds(), budget: jointBudget(), conf: jointConf() });
+/* your profile, but judged on the joint cap — so the only thing that
+   differs between the two rankings is whose context was in the room */
+const soloCtx = () => ({ needs: state.needs, budget: jointBudget(), conf: confidence() });
+
+function rankShared(a, ctx) {
+  const affordable = SHARED.filter((p) => p.price <= ctx.budget);
+  const pool = affordable.length ? affordable : [...SHARED].sort((x, y) => x.price - y.price).slice(0, 1);
+  return {
+    over: SHARED.filter((p) => p.price > ctx.budget),
+    list: pool.map((p) => ({ ...p, score: score(p, a, ctx) })).sort((x, y) => y.score - x.score)
+  };
+}
+
+const CHAMP = { you: "your pick", them: `${PARTNER.name}'s pick` };
+
+function partnerCards() {
+  return `<div class="signals">${PARTNER.purchases.map((p) => `
+    <article class="signal done theirs">
+      <div class="sig-head">
+        ${tile(p.kind)}
+        <div><div class="sig-name">${p.name}</div><div class="sig-meta">${p.brand} · ${p.date}</div></div>
+        <div class="sig-price">S$${fmt(p.price)}</div>
+      </div>
+      <div class="sig-reason">${p.t}</div>
+      <div class="sig-axes">${Object.entries(p.w).map(([ax, v]) => axChip(ax, v)).join("")}</div>
+    </article>`).join("")}</div>`;
+}
+
+function duoCard(you, them) {
+  const mini = (who, c, conf, cls) => `
+    <div class="duo-card ${cls}">
+      <span class="who">${who}</span>
+      <div class="type-code">${c}</div>
+      <div class="type-name">${TYPES[c].name}</div>
+      <p class="type-line">${TYPES[c].line}</p>
+      <span class="duo-conf">${conf}% confidence</span>
+    </div>`;
+  return `<div class="duo">
+    ${mini("You", code(you), confidence(), "u")}
+    ${mini(PARTNER.name, code(them), partnerConf(), "t")}
+  </div>`;
+}
+
+/* One track per axis, two markers on it. The bar between them is the
+   disagreement — the whole negotiation, drawn to scale. */
+function agreementMap(you, them) {
+  return `<div class="pair-key"><span class="k-u">you</span><span class="k-t">${PARTNER.name}</span><span class="k-g">the gap you're actually arguing about</span></div>
+  <div class="axes pair-axes">${AXES.map((A) => {
+    const py = 50 - you[A.k] / 2, pt = 50 - them[A.k] / 2;
+    const gap = Math.abs(py - pt);
+    const same = Math.sign(you[A.k] || 1) === Math.sign(them[A.k] || 1);
+    return `
+      <div class="axis-row">
+        <div class="axis-labels"><span class="${you[A.k] >= 0 ? "on" : ""}">${A.pos}</span><span class="${you[A.k] < 0 ? "on" : ""}">${A.neg}</span></div>
+        <div class="axis-track">
+          <b class="${same ? "agree" : "gap"}" style="left:${Math.min(py, pt)}%;width:${gap}%"></b>
+          <u></u>
+          <i style="left:${py}%"></i><i class="them" style="left:${pt}%"></i>
+        </div>
+        <div class="axis-val">${A.name} · ${same
+          ? `agreed on <b style="color:var(--accent)">${poleOf(A, you)}</b>`
+          : `<b style="color:var(--warn)">${Math.round(gap * 2)} apart</b> — you ${poleOf(A, you).toLowerCase()}, ${PARTNER.name} ${poleOf(A, them).toLowerCase()}`}</div>
+      </div>`;
+  }).join("")}</div>`;
+}
+
+function sharedCards(list) {
+  return `<div class="recs">${list.map((p, i) => `
+    <article class="rec" style="animation-delay:${i * 70}ms">
+      ${tile(p.kind)}
+      <div>
+        <div class="rec-top">
+          <div>
+            <div class="rec-name">${p.name}</div>
+            <div class="rec-brand">${p.brand} · S$${fmt(p.price)}
+              ${p.champion ? `<span class="tag ${p.champion === "you" ? "tag-you" : "tag-ok"}">${CHAMP[p.champion]}</span>`
+                           : `<span class="tag tag-warn">nobody's pick</span>`}</div>
+          </div>
+          <div class="rec-match"><b>${p.score}%</b><span>joint</span></div>
+        </div>
+        <div class="meter"><i data-w="${p.score}"></i></div>
+        <div class="rec-why"><b>For you:</b> ${p.forYou}</div>
+        <div class="rec-foot"><b>For ${PARTNER.name}:</b> ${p.forThem}</div>
+      </div>
+    </article>`).join("")}</div>`;
+}
+
+async function runCouple() {
+  if (state.busy) return;
+  if (!state.stage) {
+    const b = await addMessage("bot",
+      `I can't arbitrate for two people while I've read nothing about one of them. Let me read your purchases first — ${PARTNER.name}'s four are already on file.`);
+    renderQuickies(b, [["Read my purchase history", () => runBatch(0)]]);
+    return;
+  }
+  state.busy = true;
+
+  const t = showTyping();
+  await wait(780);
+  t.remove();
+
+  await addMessage("bot",
+    `A type is easy to argue about on your own. The harder case is two of you and one flat. ` +
+    `<b>${PARTNER.name}</b> has been through this on their side — four purchases, read the same way yours were.<br><br>` +
+    `Neither of you can hold the other's twelve months of receipts in your head during an argument about a sofa. I can. ` +
+    `That's the only advantage I have here: not taste, <b>context</b>.`);
+
+  const you = axes(), them = partnerAxes();
+
+  const b1 = await addMessage("bot", `What their receipts say:`);
+  b1.insertAdjacentHTML("beforeend", partnerCards());
+  scroll();
+  await wait(700);
+
+  const b2 = await addMessage("bot",
+    `Separately, you are <b>${code(you)}</b> and ${PARTNER.name} is <b>${code(them)}</b>. ` +
+    `That's ${[...code(you)].filter((L, i) => L !== code(them)[i]).length} of four letters apart.`);
+  b2.insertAdjacentHTML("beforeend", duoCard(you, them));
+  b2.insertAdjacentHTML("beforeend", agreementMap(you, them));
+  scroll();
+  await wait(820);
+
+  const j = jointAxes(), jc = code(j), share = jointShare();
+  const jointRank = rankShared(j, jointCtx());
+  const soloRank = rankShared(you, soloCtx());
+  const top = jointRank.list[0], soloTop = soloRank.list[0];
+
+  const b3 = await addMessage("bot",
+    `Merged, the household reads <b>${jc} — ${TYPES[jc].name}</b> at ${jointConf()}%. ` +
+    `Lower than either of you alone, because the disagreement is real and I'm not going to average it away.<br><br>` +
+    `The merge is weighted <b>${share} / ${100 - share}</b> toward you — not because you're more right, but because I've read ` +
+    `${PURCHASES.filter((p) => p.read && !p.out).length} of your purchases against ${PARTNER.purchases.length} of ${PARTNER.name}'s. ` +
+    `If they read in four more, this number moves and so might the ruling.`);
+
+  renderCallout(b3,
+    `<b>Joint cap.</b> S$${fmt(state.budget)} of yours plus S$${fmt(PARTNER.budget)} of theirs — S$${fmt(jointBudget())}, enforced in code before either of you gets a vote.` +
+    (jointRank.over.length
+      ? ` ${jointRank.over.map((p) => `<b>${p.name}</b> at S$${fmt(p.price)}`).join(", ")} never reached the ranking. Raise the cap on the left and ${jointRank.over.length > 1 ? "they come" : "it comes"} back.`
+      : ` All three cleared it.`));
+
+  await wait(640);
+  const b4 = await addMessage("bot", `Three items, scored against the merged profile and the joint cap:`);
+  b4.insertAdjacentHTML("beforeend", sharedCards(jointRank.list));
+  requestAnimationFrame(() => b4.querySelectorAll(".meter i").forEach((m) => { m.style.width = m.dataset.w + "%"; }));
+  scroll();
+  await wait(820);
+
+  const flipped = soloTop.id !== top.id;
+  const soloScore = score(top, you, soloCtx());
+  // each side's concession, stated in the other one's words
+  const conceded = SHARED.filter((p) => p.champion && p.id !== top.id).map((p) => p.champion === "you"
+    ? `You give up <b>${p.name}</b>. ${PARTNER.name}'s objection: ${p.forThem}`
+    : `${PARTNER.name} gives up <b>${p.name}</b>. Your objection: ${p.forYou}`);
+  const widest = [...AXES].sort((x, y) => Math.abs(you[y.k] - them[y.k]) - Math.abs(you[x.k] - them[x.k]))[0];
+
+  const b5 = await addMessage("bot",
+    `<b>Ruling: ${top.name}, at ${top.score}%.</b> ` +
+    (top.champion === null
+      ? `Neither of you brought it. That's the finding — the thing that survives both profiles was nobody's opening position.<br><br>`
+      : `Which was ${top.champion === "you" ? "your own opening position — so the merge cost you nothing, and that's a result too" : `${PARTNER.name}'s opening position, and it holds up against your receipts as well as theirs`}.<br><br>`) +
+    (flipped
+      ? `Run the same three items against <b>your context alone</b> and <b>${soloTop.name}</b> wins at ${soloTop.score}%, with ${top.name} at ${soloScore}%. ` +
+        `Same catalogue, same cap, same arithmetic — only the context changed. That gap is the entire case for asking a model to hold both sides.`
+      : `Against your context alone the order doesn't change, which is worth saying plainly: more context isn't automatically a different answer. Here it just made this one defensible to both of you.`));
+
+  renderCallout(b5,
+    `<b>What each of you gives up.</b> ${conceded.join("<br>")}<br><br>` +
+    `<b>What I can't do.</b> I don't know which of you cares more, and no receipt will ever tell me. ` +
+    `The <b>${widest.name.toLowerCase()}</b> gap — ${Math.abs(you[widest.k] - them[widest.k])} points wide — is the one to argue out loud. I've only sized it.`);
+
+  renderQuickies(b5, [
+    ["Show the evidence trail", () => trailModal()],
+    ["Raise the budget and re-run", () => { setBudget(clamp(state.budget + 250, 50, 1500)); renderRecs(); runCouple(); }],
+    ["Back to my own picks", () => runFinalOrVerdict()]
+  ]);
+  state.busy = false;
+}
+
+/* the couple pass is a side trip; this puts you back where you were */
+const runFinalOrVerdict = () => (state.stage >= 4 ? runFinal() : verdict());
 
 /* ============================================================
    MODALS
@@ -981,8 +1263,21 @@ async function boot() {
     ["How does this work?", () => explain()]
   ]);
 
-  // ?auto=1 skips straight into round 1 — handy for the presentation
-  if (new URLSearchParams(location.search).get("auto")) { opening.remove(); runBatch(0); }
+  // ?auto=1 skips straight into round 1, ?auto=couple straight into the
+  // two-person case with the history already read — both for the presentation
+  const auto = new URLSearchParams(location.search).get("auto");
+  if (auto) {
+    opening.remove();
+    if (auto === "couple") {
+      PURCHASES.forEach((p) => { p.read = true; p.pick = 0; });
+      state.stage = 2;
+      setRound(2);
+      refresh();
+      runCouple();
+    } else {
+      runBatch(0);
+    }
+  }
 }
 
 async function explain() {
@@ -1012,6 +1307,7 @@ on("#budgetRange", "input", (e) => { setBudget(Number(e.target.value)); renderRe
 on("#resetBtn", "click", boot);
 on("#trailBtn", "click", trailModal);
 on("#overrideBtn", "click", typesModal);
+on("#coupleBtn", "click", runCouple);
 on("#modalClose", "click", closeModal);
 on("#modal", "click", (e) => { if (e.target.id === "modal") closeModal(); });
 on(document, "keydown", (e) => { if (e.key === "Escape") closeModal(); });
