@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ShopPersona — purchase personality from what you actually bought</title>
+<meta name="description" content="ShopPersona prototype: reads a purchase history, predicts one of 16 shopping types, shows its reasoning for every purchase, and lets you overrule it." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🧭</text></svg>" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ambient background -->
+<div class="aurora" aria-hidden="true">
+  <span class="blob b1"></span><span class="blob b2"></span><span class="blob b3"></span>
+  <div class="grid-lines"></div>
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+        <circle cx="16" cy="16" r="11" />
+        <path d="M21 11 14 14l-3 7 7-3z" stroke-linejoin="round" />
+      </svg>
+    </span>
+    <div class="brand-text">
+      <strong>ShopPersona</strong>
+      <span>Purchase-personality prototype · GP8001</span>
+    </div>
+  </div>
+
+  <div class="topbar-right">
+    <span class="pill pill-demo" title="Reasoning text is scripted; scoring runs locally">
+      <span class="dot"></span> Demo mode · scripted reasoning
+    </span>
+    <button class="icon-btn" id="themeToggle" type="button" aria-label="Toggle colour theme">
+      <svg class="ic-sun" viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="4.5" fill="currentColor"/><g stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8"/></g></svg>
+      <svg class="ic-moon" viewBox="0 0 24 24" width="18" height="18"><path d="M20 14.2A8.4 8.4 0 0 1 9.8 4 8.5 8.5 0 1 0 20 14.2Z" fill="currentColor"/></svg>
+    </button>
+    <button class="ghost-btn" id="resetBtn" type="button">Reset profile</button>
+  </div>
+</header>
+
+<div class="notice" id="notice">
+  <strong>Prototype notice.</strong> The purchase history, products and prices are
+  <em>fictional demo data</em>, and the analyst's wording is written in advance — no model call is made.
+  The type, the four axis scores and the match percentages <em>are</em> computed from your choices on this page.
+  <button class="notice-x" id="noticeClose" aria-label="Dismiss">×</button>
+</div>
+
+<main class="layout">
+
+  <!-- ── LEFT: the evidence — purchases, budget, needs ─────── -->
+  <aside class="panel panel-req">
+    <h2 class="panel-title">Your inputs</h2>
+
+    <div class="budget-card">
+      <div class="budget-head">
+        <span class="label">Monthly shopping budget</span>
+        <span class="budget-value" id="budgetValue">S$450</span>
+      </div>
+      <input type="range" id="budgetRange" min="50" max="1500" step="10" value="450" aria-label="Monthly shopping budget in Singapore dollars" />
+      <div class="budget-scale"><span>S$50</span><span>S$1,500</span></div>
+      <p class="budget-note">A hard cap, checked in code. Anything above it is dropped before the type is allowed to recommend it.</p>
+    </div>
+
+    <div class="req-block">
+      <span class="label">Your situation <em class="label-hint">tap to toggle</em></span>
+      <ul class="chip-list" id="needsList"></ul>
+    </div>
+
+    <div class="req-block">
+      <span class="label">Purchase history <span class="count" id="readCount">0 / 8 read</span></span>
+      <ul class="buys" id="buysList"></ul>
+    </div>
+
+    <div class="snapshot">
+      <div><b id="statRead">0</b><span>signals read</span></div>
+      <div><b id="statFixed">0</b><span>you corrected</span></div>
+      <div><b id="statConf">10%</b><span>confidence</span></div>
+    </div>
+  </aside>
+
+  <!-- ── CENTRE: the inference feed ────────────────────────── -->
+  <section class="panel panel-chat">
+    <div class="chat-head">
+      <div class="avatar-lg" aria-hidden="true">SP</div>
+      <div>
+        <h1>Persona Analyst</h1>
+        <p class="status"><span class="dot dot-live"></span> Reading purchases, not questionnaires</p>
+      </div>
+      <span class="pill pill-soft" id="roundPill">Round 0 of 4</span>
+    </div>
+
+    <div class="thread" id="thread" role="log" aria-live="polite"></div>
+
+    <div class="composer-wrap">
+      <div class="suggestions" id="suggestions"></div>
+      <form class="composer" id="composer" autocomplete="off">
+        <input id="input" type="text" placeholder="Add a constraint — e.g. “I just moved into a studio” or “keep it under S$300 a month”" aria-label="Add a constraint" />
+        <button type="submit" class="send-btn" aria-label="Send">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path d="M3.2 20.6 21.6 12 3.2 3.4l.1 6.9 12 1.7-12 1.7z" fill="currentColor"/></svg>
+        </button>
+      </form>
+      <p class="disclaimer">A type is a hypothesis, not a verdict. Every letter here is traceable to a purchase you can overrule.</p>
+    </div>
+  </section>
+
+  <!-- ── RIGHT: the predicted type + what follows from it ──── -->
+  <aside class="panel panel-side">
+    <h2 class="panel-title">Predicted type</h2>
+    <div id="typeBox"></div>
+
+    <div class="axes" id="axesBox"></div>
+
+    <div class="side-actions">
+      <button class="mini-btn wide" id="trailBtn">Evidence trail</button>
+      <button class="mini-btn wide" id="overrideBtn">Not me — pick my type</button>
+    </div>
+
+    <h2 class="panel-title mt" id="recsTitle">Recommendations</h2>
+    <p class="side-sub" id="recsSub">Nothing yet. The analyst needs at least one round of purchases before it will name anything.</p>
+    <div id="recs"></div>
+
+    <div class="mini-legend">
+      <span class="tag tag-ok">model's read</span>
+      <span class="tag tag-you">your read</span>
+      <span class="tag tag-warn">excluded</span>
+    </div>
+  </aside>
+</main>
+
+<!-- modal -->
+<div class="modal-backdrop" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <button class="modal-x" id="modalClose" aria-label="Close">×</button>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
