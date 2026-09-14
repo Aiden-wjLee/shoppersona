@@ -996,29 +996,39 @@ async function explain() {
   state.busy = false;
 }
 
-/* ── events ─────────────────────────────────────────────── */
-$("#composer").addEventListener("submit", (e) => { e.preventDefault(); handleText($("#input").value); });
-$("#budgetRange").addEventListener("input", (e) => { setBudget(Number(e.target.value)); renderRecs(); });
-$("#resetBtn").addEventListener("click", boot);
-$("#trailBtn").addEventListener("click", trailModal);
-$("#overrideBtn").addEventListener("click", typesModal);
-$("#modalClose").addEventListener("click", closeModal);
-$("#modal").addEventListener("click", (e) => { if (e.target.id === "modal") closeModal(); });
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+/* ── events ─────────────────────────────────────────────────
+   Bound through on(), which skips a selector that isn't on the page
+   instead of throwing. Without it a single stale element reference —
+   a browser holding a cached app.js against a newer index.html, say —
+   takes out every listener below it and boot() with them. */
+function on(sel, ev, fn) {
+  const el = typeof sel === "string" ? $(sel) : sel;
+  if (el) el.addEventListener(ev, fn);
+  else console.warn(`[shoppersona] no element for ${sel}; that handler is inactive`);
+}
 
-thread.addEventListener("click", (e) => {
+on("#composer", "submit", (e) => { e.preventDefault(); handleText($("#input").value); });
+on("#budgetRange", "input", (e) => { setBudget(Number(e.target.value)); renderRecs(); });
+on("#resetBtn", "click", boot);
+on("#trailBtn", "click", trailModal);
+on("#overrideBtn", "click", typesModal);
+on("#modalClose", "click", closeModal);
+on("#modal", "click", (e) => { if (e.target.id === "modal") closeModal(); });
+on(document, "keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+on(thread, "click", (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
   if (btn.dataset.ok) confirmSignal(byId(btn.dataset.ok));
   if (btn.dataset.no) openPicker($("#sig-" + btn.dataset.no), byId(btn.dataset.no));
 });
 
-$("#modalBody").addEventListener("click", (e) => {
+on("#modalBody", "click", (e) => {
   const opt = e.target.closest("[data-type]");
   if (opt) lockType(opt.dataset.type);
 });
 
-$("#themeToggle").addEventListener("click", () => {
+on("#themeToggle", "click", () => {
   const root = document.documentElement;
   root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
   localStorage.setItem("shoppersona-theme", root.dataset.theme);
